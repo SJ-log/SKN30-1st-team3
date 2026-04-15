@@ -5,6 +5,16 @@ import geopandas as gpd
 import json
 from sqlalchemy import create_engine
 from streamlit_folium import st_folium
+import plotly.express as px
+import plotly.graph_objects as go
+from pathlib import Path
+from streamlit import fragment
+
+# =========================
+# 현재 경로 설정
+# =========================
+
+BASE_DIR = Path(__file__).resolve().parent
 
 # ============================================
 # 페이지 설정
@@ -128,7 +138,6 @@ def load_csv_data():
     return df_station, df_car, df_gu
 
 @st.cache_data          
-@st.cache_data          
 def get_station_data():
     df_station, _, df_gu = load_csv_data()
     # SQL JOIN 대신 pandas merge 사용
@@ -164,6 +173,40 @@ def get_shortage_data():
     return df
 
 @st.cache_data
+def load_price_map_data():
+    geo_path = BASE_DIR / "서울_자치구_경계_2017.geojson"
+    fee_csv_path = BASE_DIR / "seoul_charge_final.csv"
+    car_csv_path = BASE_DIR / "seoul_car_sum.csv"
+
+    with open(geo_path, "r", encoding="utf-8") as f:
+        my_geo = json.load(f)
+
+    fee_df = pd.read_csv(fee_csv_path, encoding="utf-8")
+    fee_df.columns = fee_df.columns.str.strip()
+    fee_df["시군구"] = fee_df["시군구"].astype(str).str.strip()
+    fee_df["충전유형"] = fee_df["충전유형"].astype(str).str.strip()
+    fee_df["회원가_평균"] = pd.to_numeric(fee_df["회원가_평균"], errors="coerce")
+    fee_df["비회원가_평균"] = pd.to_numeric(fee_df["비회원가_평균"], errors="coerce")
+
+    car_df = pd.read_csv(car_csv_path, encoding="utf-8")
+    car_df.columns = car_df.columns.str.strip()
+    car_df = car_df.rename(columns={
+        "시군구명": "시군구",
+        "sum(계)": "전기차대수"
+    })
+    car_df["시군구"] = car_df["시군구"].astype(str).str.strip()
+    car_df["전기차대수"] = (
+        car_df["전기차대수"]
+        .astype(str)
+        .str.replace(",", "", regex=False)
+    )
+    car_df["전기차대수"] = pd.to_numeric(car_df["전기차대수"], errors="coerce")
+
+    gdf = gpd.read_file(geo_path, encoding="utf-8")
+
+    return my_geo, fee_df, car_df, gdf
+
+@st.cache_data
 def load_geojson():
     # 이 부분은 기존과 동일 (파일이 있어야 함)
     try:
@@ -175,6 +218,245 @@ def load_geojson():
     except:
         st.error("GeoJSON 파일을 찾을 수 없습니다.")
         return None
+# ================================
+# ===========페이지3=================
+# ==============================------
+
+def render_price_map_page():
+    my_geo, fee_df, car_df, gdf = load_price_map_data()
+
+    st.markdown('<p class="page-title">💰 요금 및 전기차 현황 지도</p>', unsafe_allow_html=True)
+    st.markdown('<p class="page-subtitle">지역구별 평균 충전요금과 자치구별 전기차 대수 조회.</p>', unsafe_allow_html=True)
+
+    st.markdown("옵션 선택")
+
+    mode_col1, mode_col2 = st.columns(2)
+
+    with mode_col1:
+        mode = st.selectbox("조회 항목", ["요금 확인", "전기차 대수 확인"], key="price_mode")
+
+    plot_df = None
+    color_col = None
+    map_title = None
+    hover_data = None
+    rank_df = None
+# 전기차 대수 확인 모드
+    if mode == "전기차 대수 확인":
+        plot_df = car_df.copy()
+        color_col = "전기차대수"
+        map_title = "서울 자치구별 전기차 대수"
+        hover_data = {
+            "전기차대수": ":,.0f"
+        }
+
+        rank_df = (
+            plot_df[["시군구", "전기차대수"]]
+            .sort_values("전기차대수", ascending=False)
+            .reset_index(drop=True)
+        )
+        rank_df.insert(0, "순위", range(1, len(rank_df) + 1))
+# 요금 확인 모드
+    elif mode == "요금 확인":
+        option_col1, option_col2 = st.columns(2)
+
+        with option_col1:
+            charge_type = st.selectbox("충전유형", ["급속", "완속"], key="price_charge_type")
+
+        with option_col2:
+            price_type = st.selectbox("가격종류", ["회원가_평균", "비회원가_평균"], key="price_type")
+
+        title_map = {
+            "회원가_평균": "회원가 평균",
+            "비회원가_평균": "비회원가 평균"
+        }
+# 가격표시
+        plot_df = fee_df[fee_df["충전유형"] == charge_type].copy()
+        color_col = price_type
+        map_title = f"서울 자치구별 {charge_type} 충전 {title_map[price_type]}"
+        hover_data = {
+            "충전유형": True,
+            "회원가_평균": ":.2f",
+            "비회원가_평균": ":.2f",
+        }
+
+        rank_df = (
+            plot_df[["시군구", "충전유형", "회원가_평균", "비회원가_평균"]]
+            .sort_values(price_type)
+            .reset_index(drop=True)
+        )
+        rank_df.insert(0, "순위", range(1, len(rank_df) + 1))
+# 서울시 지도 설정
+    fig = px.choropleth_mapbox(
+        plot_df,
+        geojson=my_geo,
+        locations="시군구",
+        featureidkey="properties.SIG_KOR_NM",
+        color=color_col,
+        hover_name="시군구",
+        hover_data=hover_data,
+        color_continuous_scale=[
+            [0.0, "#02eeff"],
+            [0.5, "#0080ff"],
+            [1.0, "#1B00C8"]
+        ],
+        mapbox_style="carto-positron",
+        zoom=9.5,
+        center={"lat": 37.563383, "lon": 126.996039},
+        opacity=0.95,
+    )
+
+    fig.update_traces(
+        marker_line_color="white",
+        marker_line_width=1
+    )
+
+    label_points = gdf.representative_point()
+
+    fig.add_trace(
+        go.Scattermapbox(
+            lon=label_points.x,
+            lat=label_points.y,
+            text=gdf["SIG_KOR_NM"],
+            mode="text",
+            textfont=dict(
+                size=13,
+                color="white",
+                weight="bold"
+            ),
+            textposition="middle center",
+            hoverinfo="skip",
+            showlegend=False
+        )
+    )
+
+    fig.update_layout(
+        title={
+            "text": map_title,
+            "x": 0.5,
+            "xanchor": "center",
+            "font": {"size": 24}
+        },
+        margin={"r": 0, "t": 70, "l": 0, "b": 0},
+        height=650
+    )
+
+    st.plotly_chart(
+        fig,
+        width="stretch",
+        config={
+            "scrollZoom": True,
+            "displayModeBar": True
+        }
+    )
+
+    if mode == "요금 확인":
+        st.space("small")
+
+
+        compare_df = pd.concat([
+            fee_df[["시군구", "충전유형", "회원가_평균"]]
+                .rename(columns={"회원가_평균": "가격"})
+                .assign(가격종류="회원가"),
+            fee_df[["시군구", "충전유형", "비회원가_평균"]]
+                .rename(columns={"비회원가_평균": "가격"})
+                .assign(가격종류="비회원가")
+        ], ignore_index=True)
+
+        compare_df["구분"] = compare_df["가격종류"] + " " + compare_df["충전유형"]
+
+        summary_rows = []
+
+        for category, grp in compare_df.groupby("구분"):
+            min_idx = grp["가격"].idxmin()
+            max_idx = grp["가격"].idxmax()
+
+            summary_rows.append({
+                "구분": category,
+                "비교": "최저가",
+                "가격": grp.loc[min_idx, "가격"],
+                "지역": grp.loc[min_idx, "시군구"]
+            })
+            summary_rows.append({
+                "구분": category,
+                "비교": "최고가",
+                "가격": grp.loc[max_idx, "가격"],
+                "지역": grp.loc[max_idx, "시군구"]
+            })
+
+        summary_df = pd.DataFrame(summary_rows)
+
+        order = ["회원가 급속", "회원가 완속", "비회원가 급속", "비회원가 완속"]
+        summary_df["구분"] = pd.Categorical(summary_df["구분"], categories=order, ordered=True)
+        summary_df = summary_df.sort_values(["구분", "비교"])
+
+        bar_fig = px.bar(
+            summary_df,
+            x="구분",
+            y="가격",
+            color="비교",
+            barmode="group",
+            text="가격",
+            hover_data={"지역": True, "가격": ":.2f"},
+            color_discrete_map={
+                "최저가": "#22ff00",
+                "최고가": "#CB0596"
+            },
+            title="충전 유형별 최저가 · 최고가 비교"
+        )
+
+        bar_fig.update_traces(
+            texttemplate="%{text:.1f}",
+            textposition="outside"
+        )
+
+        bar_fig.update_layout(
+            height=450,
+            title={
+                "x": 0.5,
+                "xanchor": "center",
+                "font": {"size": 22}
+            },
+            xaxis_title="",
+            yaxis_title="평균 요금(원)",
+            margin={"r": 20, "t": 60, "l": 20, "b": 20}
+        )
+
+        st.plotly_chart(
+            bar_fig,
+            width="stretch",
+            config={"displayModeBar": True}
+        )
+
+    st.space("small")
+
+
+    if mode == "요금 확인":
+        rank_title = "서울 자치구별 전기차 충전요금 순위"
+    else:
+        rank_title = "서울 자치구별 전기차 대수 순위"
+
+    st.markdown(
+        f"""
+        <p style="
+            font-size:28px;
+            font-weight:700;
+            text-align:center;
+            margin-bottom:12px;
+        ">
+            {rank_title}
+        </p>
+        """,
+        unsafe_allow_html=True
+    )
+
+    left, center, right = st.columns([1.2, 1.6, 1.2])
+
+    with center:
+        st.dataframe(
+            rank_df,
+            width="stretch",
+            hide_index=True
+        )
 
 # ============================================
 # 사이드바 & 로직 (기존과 동일)
@@ -196,6 +478,13 @@ with st.sidebar:
                  type="primary" if st.session_state.page == 'shortage' else "secondary"):
         st.session_state.page = 'shortage'
         st.rerun()
+       
+    
+    if st.button("💰  요금 / 전기차 지도", use_container_width=True,
+                type="primary" if st.session_state.page == 'price_map' else "secondary"):
+        st.session_state.page = 'price_map'
+        st.rerun()
+    
 
     # 구 필터
     if st.session_state.page == 'stations':
@@ -356,4 +645,9 @@ elif st.session_state.page == 'shortage':
     df_rank.index += 1
     df_rank.columns = ['구', '전기차 수', '충전소 수', '부족 지수']
     st.dataframe(df_rank, use_container_width=True, height=300)
+
+# ==========================p.3 elif====================================
+elif st.session_state.page == 'price_map':
+    render_price_map_page()
+
     
