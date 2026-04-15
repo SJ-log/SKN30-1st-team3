@@ -3,17 +3,14 @@ import folium
 import pandas as pd
 import geopandas as gpd
 import json
-from sqlalchemy import create_engine
 from streamlit_folium import st_folium
 import plotly.express as px
 import plotly.graph_objects as go
 from pathlib import Path
-from streamlit import fragment
 
 # =========================
 # 현재 경로 설정
 # =========================
-
 BASE_DIR = Path(__file__).resolve().parent
 
 # ============================================
@@ -21,7 +18,7 @@ BASE_DIR = Path(__file__).resolve().parent
 # ============================================
 st.set_page_config(
     page_title="서울시 전기차 충전 인프라",
-    page_icon="⚡",
+    page_icon="⚡️",
     layout="wide",
     initial_sidebar_state="expanded"
 )
@@ -119,22 +116,21 @@ st.markdown("""
     .block-container { padding: 1.5rem 2rem; }
 </style>
 """, unsafe_allow_html=True)
+
+
 # ============================================
 # 데이터 로드 (CSV 방식으로 변경)
 # ============================================
 @st.cache_data
 def load_csv_data():
-    # encoding='cp949'를 추가하여 한글 깨짐 및 에러 방지
     try:
         df_station = pd.read_csv("charging_station_list.csv", encoding='cp949')
         df_car = pd.read_csv("seoul_car_status.csv", encoding='cp949')
         df_gu = pd.read_csv("gu_master.csv", encoding='cp949')
     except UnicodeDecodeError:
-        # 만약 파일이 utf-8-sig로 저장되어 있을 경우를 대비한 예외 처리
         df_station = pd.read_csv("charging_station_list.csv", encoding='utf-8-sig')
         df_car = pd.read_csv("seoul_car_status.csv", encoding='utf-8-sig')
         df_gu = pd.read_csv("gu_master.csv", encoding='utf-8-sig')
-    
     return df_station, df_car, df_gu
 
 @st.cache_data          
@@ -143,10 +139,10 @@ def get_station_data():
     # SQL JOIN 대신 pandas merge 사용
     merged = pd.merge(df_station, df_gu, on='gu_code', how='inner')
     
-    # [핵심] lat 또는 lng 컬럼에 빈 값(NaN)이 있는 행은 제거합니다.
+    # lat 또는 lng 컬럼에 빈 값(NaN)이 있는 행은 제거
     merged = merged.dropna(subset=['lat', 'lng'])
     
-    # [추가 팁] 좌표가 0으로 입력된 데이터가 있다면 그것도 제거하는 게 좋습니다.
+    # 좌표가 0으로 입력된 데이터가 있다면 그것도 제거
     merged = merged[(merged['lat'] != 0) & (merged['lng'] != 0)]
     
     return merged[['id', '충전소', '충전기타입', '주소', '운영기관', 'lat', 'lng', 'gu_name']]
@@ -218,10 +214,94 @@ def load_geojson():
     except:
         st.error("GeoJSON 파일을 찾을 수 없습니다.")
         return None
-# ================================
-# ===========페이지3=================
-# ==============================------
+    
+# ============================================
+# 홈 페이지
+# ============================================
+def render_home_page():
+    hero = st.container()
+    with hero:
+        # 화면 중앙 맞추기
+        empty1 , mid_col, empty2 = st.columns([1, 4, 1])
+        with mid_col:
+            st.markdown("<h1 style='text-align: center;'>⚡</h1>", unsafe_allow_html=True)
+            st.header("서울시 전기차 충전 인프라 분석", anchor=False)
+        
+            # 안내 문구
+            st.info("""
+            **서울시 25개 구**의 전기차 등록 현황과 충전소 분포를 분석하여
+            충전 인프라 부족 지역을 시각화한 대시보드입니다.
+            """, icon="ℹ️")
+            
+    # 핵심 지표 카드
+    df_station, df_car , df_gu = load_csv_data()
+    total_stations = len(df_station)
+    total_ev       = int(df_car[df_car['연료명'] == '전기']['계'].sum())
+    total_gu        = len(df_gu)
+    c1, c2, c3 = st.columns(3)
+    for col, icon, val, label in [
+        (c1, "🔌", f"{total_stations:,}", "등록된 충전소 수"),
+        (c2, "🚗", f"{total_ev:,}",       "서울시 전기차 대수"),
+        (c3, "🗺️", f"{total_gu}",         "분석 대상 자치구"),
+    ]:
+        with col:
+            st.markdown(f'''
+            <div style="background:#1a1d27; border:1px solid #2e3147; border-radius:16px;
+                        padding:28px 20px; text-align:center;">
+                <div style="font-size:32px; margin-bottom:10px;">{icon}</div>
+                <div style="font-size:32px; font-weight:700; color:#3b82f6; line-height:1.1;">{val}</div>
+                <div style="font-size:13px; color:#6b7280; margin-top:6px;">{label}</div>
+            </div>''', unsafe_allow_html=True)
+    st.markdown("<br><br>", unsafe_allow_html=True)
+    # 메뉴 소개 카드
+    st.markdown('''
+    <p style="text-align:center; font-size:18px; font-weight:600;
+              color:#e2e8f0; margin-bottom:20px;">📋 제공 기능</p>
+    ''', unsafe_allow_html=True)
 
+    menus = [
+        ("🗺️", "전체 충전소 현황",
+         "서울시 모든 충전소의 위치를 지도에 표시합니다. 구별 필터링 및 충전소 상세 정보를 확인할 수 있습니다.",
+         "stations"),
+        ("📊", "구역별 인프라 부족 정도",
+         "전기차 수 대비 충전소 수를 계산하여 충전 인프라가 부족한 구역을 색상으로 시각화합니다.",
+         "shortage"),
+        ("💰", "요금 / 전기차 지도",
+         "자치구별 평균 충전 요금과 전기차 등록 대수를 지도 위에 시각화합니다.",
+         "price_map"),
+    ]
+
+    cols = st.columns(3)
+    for col, (icon, title, desc, page_key) in zip(cols, menus):
+        with col:
+            st.markdown(f'''
+            <div style="background:#1a1d27; border:1px solid #2e3147; border-radius:16px;
+                        padding:24px 20px; min-height:180px;">
+                <div style="font-size:28px; margin-bottom:12px;">{icon}</div>
+                <p style="font-size:15px; font-weight:600; color:#e2e8f0; margin-bottom:8px;">{title}</p>
+                <p style="font-size:13px; color:#6b7280; line-height:1.6;">{desc}</p>
+            </div>''', unsafe_allow_html=True)
+            st.markdown("<div style='height:10px'></div>", unsafe_allow_html=True)
+            if st.button(f"{title} 바로가기 →", key=f"home_btn_{page_key}", use_container_width=True):
+                st.session_state.page = page_key
+                st.rerun()
+
+    st.markdown("<br><br>", unsafe_allow_html=True)
+
+    # 데이터 출처
+    st.markdown('''
+    <div style="text-align:center; padding:24px; border-top:1px solid #2e3147;
+                color:#4b5563; font-size:12px; line-height:1.8;">
+        📂 데이터 출처: 서울 열린데이터 광장, 차지인포 &nbsp;|&nbsp;
+        🗓️ 기준: 2026년 03월 &nbsp;|&nbsp;
+        🔧 Built with Streamlit · Folium 
+    </div>
+    ''', unsafe_allow_html=True)
+    
+    
+# ============================================
+#  페이지 3 (요금 분석 페이지)
+# ============================================
 def render_price_map_page():
     my_geo, fee_df, car_df, gdf = load_price_map_data()
 
@@ -285,6 +365,7 @@ def render_price_map_page():
             .reset_index(drop=True)
         )
         rank_df.insert(0, "순위", range(1, len(rank_df) + 1))
+        
 # 서울시 지도 설정
     fig = px.choropleth_mapbox(
         plot_df,
@@ -459,48 +540,48 @@ def render_price_map_page():
         )
 
 # ============================================
-# 사이드바 & 로직 (기존과 동일)
+# 사이드바 
 # ============================================
+SEOUL_CENTER = [37.5665, 126.9780]
+
 with st.sidebar:
-    st.markdown("### 서울시 전기차\n### 충전 인프라")
+    st.markdown("### ⚡ 서울시 전기차\n### 충전 인프라")
     st.markdown("<hr style='border-color:#2e3147;margin:12px 0'>", unsafe_allow_html=True)
 
     if 'page' not in st.session_state:
-        st.session_state.page = 'stations'
+        st.session_state.page = 'home'
 
-    # 버튼 로직
-    if st.button("🗺️  전체 충전소 현황", use_container_width=True, 
-                 type="primary" if st.session_state.page == 'stations' else "secondary"):
-        st.session_state.page = 'stations'
-        st.rerun()
+    for label, key in [
+        ("🏠  소개",                   'home'),
+        ("🗺️  전체 충전소 현황",       'stations'),
+        ("📊  구역별 인프라 부족 정도", 'shortage'),
+        ("💰  요금 / 전기차 지도",      'price_map'),
+    ]:
+        if st.button(label, use_container_width=True,
+                     type="primary" if st.session_state.page == key else "secondary"):
+            st.session_state.page = key
+            st.rerun()
 
-    if st.button("📊  구역별 인프라 부족 정도", use_container_width=True,
-                 type="primary" if st.session_state.page == 'shortage' else "secondary"):
-        st.session_state.page = 'shortage'
-        st.rerun()
-       
-    
-    if st.button("💰  요금 / 전기차 지도", use_container_width=True,
-                type="primary" if st.session_state.page == 'price_map' else "secondary"):
-        st.session_state.page = 'price_map'
-        st.rerun()
-    
+    st.markdown("<hr style='border-color:#2e3147;margin:12px 0'>", unsafe_allow_html=True)
 
-    # 구 필터
     if st.session_state.page == 'stations':
         st.markdown("**🔍 구 필터**")
-        df_s = get_station_data()
+        df_s    = get_station_data()
         gu_list = ['전체'] + sorted(df_s['gu_name'].dropna().unique().tolist())
         selected_gu = st.selectbox("구 선택", gu_list, label_visibility="collapsed")
     else:
         selected_gu = '전체'
         
 # ============================================
-# 페이지 1 : 전체 충전소 현황
+# 페이지 구현
 # ============================================
-SEOUL_CENTER = [37.5665, 126.9780]
+if st.session_state.page == 'home':
+    render_home_page()
 
-if st.session_state.page == 'stations':
+# ============================================
+# 서울시 전체 충전소 현황 페이지
+# ============================================
+elif st.session_state.page == 'stations':
     df_station = get_station_data()
 
     if selected_gu != '전체':
@@ -526,8 +607,8 @@ if st.session_state.page == 'stations':
     with col3:
         st.markdown(f"""
         <div class="metric-card">
-            <div class="metric-value">{df_station['충전기타입'].nunique()}</div>
-            <div class="metric-label">충전기 타입 수</div>
+            <div class="metric-value">{df_station['운영기관'].nunique()}</div>
+            <div class="metric-label">운영기관 수</div>
         </div>""", unsafe_allow_html=True)
 
     st.markdown("<br>", unsafe_allow_html=True)
@@ -646,7 +727,9 @@ elif st.session_state.page == 'shortage':
     df_rank.columns = ['구', '전기차 수', '충전소 수', '부족 지수']
     st.dataframe(df_rank, use_container_width=True, height=300)
 
-# ==========================p.3 elif====================================
+# ============================================
+# 페이지 3 가격 페이지
+# ============================================
 elif st.session_state.page == 'price_map':
     render_price_map_page()
 
