@@ -235,7 +235,7 @@ def render_home_page():
             
     # 핵심 지표 카드
     df_station, df_car , df_gu = load_csv_data()
-    total_stations = len(df_station)
+    total_stations = len(df_station[df_station['지역'] == '서울특별시 '])
     total_ev       = int(df_car[df_car['연료명'] == '전기']['계'].sum())
     total_gu        = len(df_gu)
     c1, c2, c3 = st.columns(3)
