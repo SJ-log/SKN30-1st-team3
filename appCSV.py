@@ -556,6 +556,7 @@ with st.sidebar:
         ("🗺️  전체 충전소 현황",       'stations'),
         ("📊  구역별 인프라 부족 정도", 'shortage'),
         ("💰  요금 / 전기차 지도",      'price_map'),
+        ("❓ FAQ 조회",              'FAQ')       
     ]:
         if st.button(label, use_container_width=True,
                      type="primary" if st.session_state.page == key else "secondary"):
@@ -733,4 +734,123 @@ elif st.session_state.page == 'shortage':
 elif st.session_state.page == 'price_map':
     render_price_map_page()
 
+    
+
+# ============================================
+# 페이지 FAQ 
+# ============================================
+DEFAULT_SOURCES = ["전체", "일반", "기아 EV", "테슬라", "무공해차", "시노에너지", "EVB"]
+SORT_FILTER_OPTIONS = {
+    "전체": "전체",
+    "충전🔌": "충전",
+    "일반🌐": "일반",
+    "안전⛔": "안전",
+    "기능🔧": "기능",
+    "배터리🔋": "배터리",
+    "주행🚗": "주행",
+    "보증📄": "보증",
+    "어플📲": "앱/연결",
+}
+
+def _get_faq_json_path():
+    return BASE_DIR / "FAQ_final3.json"
+
+
+@st.cache_data(ttl=300, show_spinner=False)
+def _load_faq_base_df():
+    faq_json_path = _get_faq_json_path()
+    with faq_json_path.open("r", encoding="utf-8") as fp:
+        payload = json.load(fp)
+
+    faq_items = payload.get("faq", [])
+    df = pd.DataFrame(faq_items)
+    required_cols = ["source", "sort", "question", "answer"]
+    for col in required_cols:
+        if col not in df.columns:
+            df[col] = ""
+    return df[required_cols].fillna("")
+
+
+@st.cache_data(ttl=60, show_spinner=False)
+def load_available_sorts(keyword, source_filter):
+    """
+    현재 조건(브랜드/검색어)에서 실제 FAQ가 존재하는 sort만 반환.
+    반환값 예: {"충전", "배터리"}
+    """
+    df = _load_faq_base_df()
+
+    if source_filter != "전체":
+        df = df[df["source"] == source_filter]
+
+    if keyword:
+        q_match = df["question"].str.contains(keyword, case=False, na=False)
+        a_match = df["answer"].str.contains(keyword, case=False, na=False)
+        df = df[q_match | a_match]
+
+    return set(df["sort"].dropna().tolist())
+
+
+@st.cache_data(ttl=60, show_spinner=False)
+def load_faq_data(keyword, source_filter, sort_filter):
+    df = _load_faq_base_df()
+
+    if source_filter != "전체":
+        df = df[df["source"] == source_filter]
+
+    if sort_filter != "전체":
+        df = df[df["sort"] == sort_filter]
+
+    if keyword:
+        q_match = df["question"].str.contains(keyword, case=False, na=False)
+        a_match = df["answer"].str.contains(keyword, case=False, na=False)
+        df = df[q_match | a_match]
+
+    return df.sort_values(["source", "sort"], kind="stable").reset_index(drop=True)
+
+
+def render_faq_page():
+    st.title("FAQ 조회 시스템")
+
+    keyword = st.text_input("질문 검색", key="faq_keyword")
+    if "faq_source" not in st.session_state:
+        st.session_state["faq_source"] = "일반"
+    source_filter = st.selectbox("브랜드 선택", DEFAULT_SOURCES, key="faq_source")
+    try:
+        available_sort_values = load_available_sorts(keyword, source_filter)
+    except Exception as exc:
+        st.error(f"주제 목록을 불러오는 중 오류가 발생했습니다: {exc}")
+        st.info("FAQ JSON 파일 경로와 파일 형식을 확인해주세요.")
+        return
+
+    available_sort_labels = ["전체"] + [
+        label
+        for label, value in SORT_FILTER_OPTIONS.items()
+        if label != "전체" and value in available_sort_values
+    ]
+
+    if st.session_state.get("faq_sort") not in available_sort_labels:
+        st.session_state["faq_sort"] = "전체"
+
+    sort_filter_label = st.selectbox("주제 선택", available_sort_labels, key="faq_sort")
+    sort_filter_value = SORT_FILTER_OPTIONS[sort_filter_label]
+
+    try:
+        df = load_faq_data(keyword, source_filter, sort_filter_value)
+    except Exception as exc:
+        st.error(f"FAQ 데이터를 불러오는 중 오류가 발생했습니다: {exc}")
+        st.info("FAQ JSON 파일 경로와 파일 형식을 확인해주세요.")
+        return
+
+    st.write(f"검색 결과: {len(df)}건")
+
+    if df.empty:
+        st.caption("조건에 맞는 FAQ가 없습니다.")
+        return
+
+    for _, row in df.iterrows():
+        with st.expander(f"[{row['source']}] [{row['sort']}] {row['question']}"):
+            st.write(str(row["answer"]).replace("\\n", "\n"))
+if st.session_state.page == "FAQ":
+    render_faq_page()
+    
     
