@@ -7,7 +7,7 @@ from streamlit_folium import st_folium
 import plotly.express as px
 import plotly.graph_objects as go
 from pathlib import Path
-
+import re
 # =========================
 # 현재 경로 설정
 # =========================
@@ -755,6 +755,44 @@ SORT_FILTER_OPTIONS = {
 def _get_faq_json_path():
     return BASE_DIR / "FAQ_final3.json"
 
+# 텍스트 정제
+def clean_faq_text(text):
+    if pd.isna(text):
+        return ""
+
+    text = str(text).strip()
+
+    # 1) 실제 줄바꿈 / 문자열 줄바꿈 통일
+    text = text.replace("\\n", "\n")
+    text = text.replace("\r\n", "\n").replace("\r", "\n")
+
+    # 2) 앞에 붙은 이상한 접두어 제거: An..., A...
+    text = re.sub(r"^\s*An\s*", "", text)
+    text = re.sub(r"^\s*A\s*", "", text)
+
+    # 3) 깨진 줄바꿈 복원
+
+    # (1) 문장부호 뒤의 n  -> 줄바꿈
+    text = re.sub(r"(?<=[\]\)\}\/\.,:;!?])\s*n\s*(?=[\[\(“”\"'‘’※•·\*\-\u2192가-힣0-9①-⑳])", "\n", text)
+    # (2) 한글/숫자 뒤의 n -> 줄바꿈
+    text = re.sub(r"(?<=[가-힣0-9])\s*n\s*(?=[\[\(“”\"'‘’※•·\*\-\u2192가-힣0-9①-⑳])", "\n", text)
+    # (3) 줄 맨 앞에 남은 접두어 n 제거
+    text = re.sub(r"(?m)^\s*n\s*(?=[\[\(“”\"'‘’※•·\*\-\u2192가-힣0-9①-⑳])","",text)
+    # 제목 끝 + 본문 시작 사이의 n도 추가로 처리
+    text = re.sub(r"(?<=[가-힣’'\"])\s*n(?=[가-힣0-9\-※•·])", "\n", text)
+
+    # 4) 빡치는 n제거
+    # (4-1) 공백/문장 뒤에 붙은 literal n -> 줄바꿈
+    text = re.sub(r"(?<=\S)\s+n\s*(?=[\[\(“”\"'‘’※•·\-\u2192가-힣0-9])", "\n", text)
+    # (4-2) 줄 맨 앞에 홀로 남은 n 제거
+    text = re.sub(r"(?m)^\s*n\s*(?=[\[\(“”\"'‘’※•·\*\-\u2192가-힣0-9①-⑳])", "", text)
+
+    # 5) 줄별 공백 정리
+    lines = [re.sub(r"[ \t]+", " ", line).strip() for line in text.split("\n")]
+    text = "\n".join(line for line in lines if line)
+
+    return text
+
 
 @st.cache_data(ttl=300, show_spinner=False)
 def _load_faq_base_df():
@@ -765,10 +803,17 @@ def _load_faq_base_df():
     faq_items = payload.get("faq", [])
     df = pd.DataFrame(faq_items)
     required_cols = ["source", "sort", "question", "answer"]
+
     for col in required_cols:
         if col not in df.columns:
             df[col] = ""
-    return df[required_cols].fillna("")
+
+    df = df[required_cols].fillna("")
+
+    for col in ["source", "sort", "question", "answer"]:
+        df[col] = df[col].map(clean_faq_text)
+
+    return df
 
 
 @st.cache_data(ttl=60, show_spinner=False)
@@ -849,7 +894,8 @@ def render_faq_page():
 
     for _, row in df.iterrows():
         with st.expander(f"[{row['source']}] [{row['sort']}] {row['question']}"):
-            st.write(str(row["answer"]).replace("\\n", "\n"))
+            st.text(str(row["answer"]))
+
 if st.session_state.page == "FAQ":
     render_faq_page()
     
