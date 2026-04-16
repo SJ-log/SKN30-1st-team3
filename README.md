@@ -86,7 +86,7 @@
 ## 🌆 시각화 미리 보기기
 1. 홈 화면
 
-<img width="1512" height="901" alt="Image" src="https://github.com/user-attachments/assets/a841c7a9-9a9c-45e3-850f-e25437ede25f" />
+<img width="1512" height="863" alt="Image" src="https://github.com/user-attachments/assets/36a0b02f-1b32-4f4c-a4eb-cce01d810373" />
 
 2. 서울시 충전소 현황
 
