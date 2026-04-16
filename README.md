@@ -24,6 +24,12 @@
 
 *** 
 
+## ERD 
+
+<img width="1150" height="472" alt="Image" src="https://github.com/user-attachments/assets/7a4ef343-bebf-495c-9f9f-9b82b09cfb25" />
+
+***
+
 ## 🛠️ 기술 스택
 **1. 언어 및 프레임워크**
 * python(3.13.5) : 전체 로직 구현 및 데이터 처리
