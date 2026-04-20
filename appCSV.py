@@ -124,13 +124,13 @@ st.markdown("""
 @st.cache_data
 def load_csv_data():
     try:
-        df_station = pd.read_csv("charging_station_list.csv", encoding='cp949')
-        df_car = pd.read_csv("seoul_car_status.csv", encoding='cp949')
-        df_gu = pd.read_csv("gu_master.csv", encoding='cp949')
+        df_station = pd.read_csv("data/processed/charging_station_list.csv", encoding='cp949')
+        df_car = pd.read_csv("data/processed/proceseoul_car_status.csv", encoding='cp949')
+        df_gu = pd.read_csv("data/processed/gu_master.csv", encoding='cp949')
     except UnicodeDecodeError:
-        df_station = pd.read_csv("charging_station_list.csv", encoding='utf-8-sig')
-        df_car = pd.read_csv("seoul_car_status.csv", encoding='utf-8-sig')
-        df_gu = pd.read_csv("gu_master.csv", encoding='utf-8-sig')
+        df_station = pd.read_csv("data/processed/charging_station_list.csv", encoding='utf-8-sig')
+        df_car = pd.read_csv("data/processed/seoul_car_status.csv", encoding='utf-8-sig')
+        df_gu = pd.read_csv("data/processed/gu_master.csv", encoding='utf-8-sig')
     return df_station, df_car, df_gu
 
 @st.cache_data          
@@ -171,8 +171,8 @@ def get_shortage_data():
 @st.cache_data
 def load_price_map_data():
     geo_path = BASE_DIR / "서울_자치구_경계_2017.geojson"
-    fee_csv_path = BASE_DIR / "seoul_charge_final.csv"
-    car_csv_path = BASE_DIR / "seoul_car_sum.csv"
+    fee_csv_path = BASE_DIR / "data/processed/seoul_charge_final.csv"
+    car_csv_path = BASE_DIR / "data/processed/seoul_car_sum.csv"
 
     with open(geo_path, "r", encoding="utf-8") as f:
         my_geo = json.load(f)

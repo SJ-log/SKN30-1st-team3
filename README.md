@@ -47,38 +47,43 @@
 ```bash
 🚘 project_1/
 ├── README.md
-├── pyproject.toml              # uv 설정 파일
-├── .python-version             # 파이썬 버전 관리 파일
-│
-├── data/                       # 데이터 관리 폴더
-│   ├── processed/              # 전처리가 완료된 분석용 데이터                           
-│   │   ├── gu_master.csv       # 자치구별 코드 통합
-│   │   ├── seoul_car_sum.csv   # 서울시 자치구별 자동차 합계
+├── data
+│   ├── processed                                   # 전처리 완료 데이터
+│   │   ├── FAQ_final3.json                         
+│   │   ├── README.md
+│   │   ├── charging_station_list.csv
+│   │   ├── gu_master.csv
+│   │   ├── hangjeongdong_서울특별시.geojson
+│   │   ├── seoul_car_status.csv
+│   │   ├── seoul_car_sum.csv
 │   │   └── seoul_charge_final.csv
-│   ├── raw/
-│   │   ├── charge_fee/
-│   │   │   └── charge_fee.csv  # 충전 요금 관련 원본
-│   │   ├── charger/
-│   │   │   └── charging_station_list.csv # 충전소 위치 및 현황 원본
-│   │   ├── ev_car/
-│   │   │   └── seoul_car_status.csv      # 서울시 연료별 자동차 등록 현황
-│   │   ├── faq/                # 기업별 수집된 FAQ 원본 (Tesla, Kia 등)
-│   │   │   ├── FAQ_0_일반_sorted.csv
+│   ├── raw_data                                    # 원본 데이터
+│   │   ├── charge_fee                              # 충전소 요금 데이터
+│   │   │   └── charge_fee.csv
+│   │   ├── charger                                 # 충전소 위치 데이터
+│   │   │   └── charging_station_list_raw.csv
+│   │   ├── ev_car                                  # 차량 등록 데이터
+│   │   │   └── seoul_car_status_raw.csv
+│   │   ├── faq                                     # 기업별 수집된 FAQ 원본 (Tesla, Kia 등)
+│   │   │   ├── FAQ_0_일반_sorted.csv
 │   │   │   ├── FAQ_1_kia_ev_final.csv
-│   │   │   ├── FAQ_2_sino.xlsx
 │   │   │   ├── FAQ_3_tesla_sorted.csv
 │   │   │   ├── FAQ_4_ev_faq_final.csv
 │   │   │   └── FAQ_5_mugonghae.csv
-│   │   └── map/                # 시각화용 지도(행정동/자치구 경계)
-│   │       ├── hangjeongdong_서울특별시.geojson
-│   │       └── 서울_자치구_경계_2017.geojson
-│   └── webcrawling/            # 데이터 수집 및 분석 스크립트
-│       ├── proproject_*.ipynb  # 사이트별 크롤링 코드 (evb, kia 등)
-│       ├── proproject_*.py     # 수집 자동화 스크립트 (pse, tesla 등)
-│       └── wordcloud.py        # 워드 클라우드 시각화 코드
-│
-└── main/                       # 웹 실행 폴더
-    └── appCSV.py               # Streamlit 메인 실행 파일
+│   │   ├── map                                     # 지도 데이터
+│   │   │   ├── hangjeongdong_서울특별시_raw.geojson
+│   │   │   └── 서울_자치구_경계_2017.geojson
+│   │   └── seoul_EV.ipynb                          # 충전소 데이터 정제용 코드
+│   └── webcrawling                                 # 웹크롤링 데이터
+│       ├── proproject_evb.ipynb
+│       ├── proproject_kia.ipynb
+│       ├── proproject_mugonghae.ipynb
+│       ├── proproject_pse.py
+│       └── proproject_tesla.py
+├── ERD.png
+├── pyproject.toml
+├── appCSV.py                                       # Streamlit 메인 실행 파일
+└── 데이터베이스 설계 문서 (Database Design Specification).pdf    
 ```
 
 ***
